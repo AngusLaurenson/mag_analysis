@@ -43,7 +43,7 @@ class analyser(object):
     # and hdf5 file name. It looks for existing hdf file
     def __init__(self, previous_self = None):
         super(analyser, self).__init__()
-            pass
+        pass
         # if previous self is defined load that
         # self.load(previous_self)
 
@@ -58,6 +58,7 @@ class analyser(object):
     # pickle file
     # def save_state(self, fname):
 
+''' ####################### METHODS ######################### '''
     # function that reads ovf files and returns your choice of
     # meta data in a dictionary & the raw header in a list
     # and / or the magnetisation data in an array
