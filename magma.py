@@ -41,9 +41,9 @@ class analyser(object):
 
     # setup function takes the list of ovf files for the simulation
     # and hdf5 file name. It looks for existing hdf file
-    def __init__(self, previous_self = None):
-        super(analyser, self).__init__()
-        pass
+    # def __init__(self, previous_self = None):
+    #     super(analyser, self).__init__()
+    #     pass
         # if previous self is defined load that
         # self.load(previous_self)
 
