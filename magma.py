@@ -7,8 +7,7 @@ import re
 import dask.array as da
 from dask.diagnostics import ProgressBar
 
-class analyser(object):
-    """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
+"""Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
 
     The idea is to first store the data from the simulation in a hdf5 file with compression.
      ___________
@@ -34,31 +33,32 @@ class analyser(object):
 
     The idea is that for one simulation, the simulation is done by one analyser object. To do this all relevant ovf files are passed to an instance. On setup the time stamps and other meta data are collected from the ovf files. Then the user can use various functions to make fourier analysis of the data sets. Ultimately I want to add the visualisation of mode profile and calculation of dispersion relations."""
 
-    # Analyser object to contain the analysis in one place
-    # and avoid cross contamination of analysis of seperate
-    # datasets in the same jupyter notebook
+# Analyser object to contain the analysis in one place
+# and avoid cross contamination of analysis of seperate
+# datasets in the same jupyter notebook
 
 
-    # setup function takes the list of ovf files for the simulation
-    # and hdf5 file name. It looks for existing hdf file
-    # def __init__(self, previous_self = None):
-    #     super(analyser, self).__init__()
-    #     pass
-        # if previous self is defined load that
-        # self.load(previous_self)
+# setup function takes the list of ovf files for the simulation
+# and hdf5 file name. It looks for existing hdf file
+# def __init__(self, previous_self = None):
+#     super(analyser, self).__init__()
+#     pass
+# if previous self is defined load that
+# self.load(previous_self)
 
-        # otherwise just do nothing
+# otherwise just do nothing
 
-    # function to load a pickle file of a previous
-    # version of the analyser object. Useful for
-    # revisiting analysis
-    # def load_state(self, previous_self):
+# function to load a pickle file of a previous
+# version of the analyser object. Useful for
+# revisiting analysis
+# def load_state(self, previous_self):
 
-    # save the state of the analyser object in a
-    # pickle file
-    # def save_state(self, fname):
+# save the state of the analyser object in a
+# pickle file
+# def save_state(self, fname):
+class analyser():
 
-''' ####################### METHODS ######################### '''
+    ''' ####################### METHODS ######################### '''
     # function that reads ovf files and returns your choice of
     # meta data in a dictionary & the raw header in a list
     # and / or the magnetisation data in an array
