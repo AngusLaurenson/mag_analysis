@@ -62,7 +62,7 @@ class analyser():
     # function that reads ovf files and returns your choice of
     # meta data in a dictionary & the raw header in a list
     # and / or the magnetisation data in an array
-    def read_ovf(fname, target = 'all'):
+    def read_ovf(self, fname, target = 'all'):
         # open the file
         with open(fname,'rb') as f:
             # initialise lists for the key value pairs
@@ -127,9 +127,10 @@ class analyser():
 
     # save the magnetisation data from a list of ovf files
     # into a hdf5 file, along with meta data etc
-    def ovf_to_hdf(hdf_name, ovf_files):
+    def ovf_to_hdf(self, hdf_name, ovf_files = []):
+        
         # calculate the size and shape of the data we are dealing with
-        meta, header = read_ovf(ovfs[0], target='meta')
+        meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
 
         data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],3,len(ovf_files)])
@@ -144,7 +145,7 @@ class analyser():
 
         # go through the ovf files and populate the hdf file with the data
         for n in range(len(ovf_files)):
-            data, meta, raw = read_ovf(ovf_files[n])
+            data, meta, raw = self.read_ovf(ovf_files[n])
             time.append(meta['time'])
             with hd.File(hdf_name,'a') as f:
                 f['mag'][:,:,:,:,n]
@@ -160,7 +161,7 @@ class analyser():
     # perform a FFT along a given access using DASK module
     # which provide lazy evaluation for out of core work
     # useful for large data sets that exceed RAM capacity
-    def fft_dask(fname, srcdset, destdset, axis):
+    def fft_dask(self, fname, srcdset, destdset, axis):
         # open the hdf5 file
         with hd.File(fname, 'a') as f:
 
@@ -196,7 +197,7 @@ class analyser():
     # perform FFT along given axis, done out of core
     # multiple chunks that span the axis are read into RAM
     # data is processed and then written to disk iteratively
-    def fft_no_dask(fname, srcdset, destdset, axis):
+    def fft_no_dask(self, fname, srcdset, destdset, axis):
         # open the hdf5 file
         with hd.File(fname, 'a') as f:
 
