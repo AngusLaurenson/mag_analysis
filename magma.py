@@ -128,7 +128,7 @@ class analyser():
     # save the magnetisation data from a list of ovf files
     # into a hdf5 file, along with meta data etc
     def ovf_to_hdf(self, hdf_name, ovf_files = []):
-        
+
         # calculate the size and shape of the data we are dealing with
         meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
@@ -144,10 +144,13 @@ class analyser():
             # There is a problem with data format supported by hdf5
 
         # go through the ovf files and populate the hdf file with the data
+        print('looping through ovf files')
         for n in range(len(ovf_files)):
+            print('reading ovf data')
             data, meta, raw = self.read_ovf(ovf_files[n])
             time.append(meta['time'])
             with hd.File(hdf_name,'a') as f:
+                print('writing to file')
                 f['mag'][:,:,:,:,n]
 
         with hd.File(hdf_name,'a') as f:
