@@ -144,13 +144,10 @@ class analyser():
             # There is a problem with data format supported by hdf5
 
         # go through the ovf files and populate the hdf file with the data
-        print('looping through ovf files')
         for n in range(len(ovf_files)):
-            print('reading ovf data')
             data, meta, raw = self.read_ovf(ovf_files[n])
             time.append(meta['time'])
-            with hd.File(hdf_name,'a') as f:
-                print('writing to file')
+            with hd.File(hdf_name,'a') as f:)
                 f['mag'][:,:,:,:,n] = data
 
         with hd.File(hdf_name,'a') as f:
