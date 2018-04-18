@@ -151,7 +151,7 @@ class analyser():
             time.append(meta['time'])
             with hd.File(hdf_name,'a') as f:
                 print('writing to file')
-                f['mag'][:,:,:,:,n]
+                f['mag'][:,:,:,:,n] = data
 
         with hd.File(hdf_name,'a') as f:
             f.create_dataset('time', data = sp.array(time))
