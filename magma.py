@@ -166,38 +166,38 @@ class analyser():
     # perform a FFT along a given access using DASK module
     # which provide lazy evaluation for out of core work
     # useful for large data sets that exceed RAM capacity
-    def fft_dask(self, fname, srcdset, destdset, axis):
-        # open the hdf5 file
-        with hd.File(fname, 'a') as f:
-
-            # get the dimensions of the problem
-            dshape = f[srcdset].shape; cshape = f[srcdset].chunks
-
-            # create a destination dataset
-            try:
-                f.create_dataset(destdset, dshape, chunks=cshape, dtype=complex)
-            except:
-                pass
-
-            # make a dask array from the dset
-            data = da.from_array(f[srcdset], f[srcdset].chunks)
+    def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis):
+        # open the hdf5 files
+        if (src_fname == dst_fname):
+            print('destination and source must be different files')
+            return 1
+        with hd.File(src_fname, 'r') as s:
+            with hd.File(dst_fname, 'w') as d:
             
-            # weld chunks together to span the fft axis
-            newcshape = sp.array(cshape)
-            newcshape[axis] = dshape[axis]
-            newcshape = tuple(newcshape)
+                dshape = s[src_dset].shape; cshape = s[src_dset].chunks
 
-            # rechunk dask array in order to perform fft
-            data = da.rechunk(data, newcshape)
+                # create a destination dataset
+                d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
 
-            with ProgressBar():
-                out = data.compute()
+                # make a dask array from the dset
+                data = da.from_array(s[src_dset], s[src_dset].chunks)
+                
+                # weld chunks together to span the fft axis
+                newcshape = sp.array(cshape)
+                newcshape[axis] = dshape[axis]
+                newcshape = tuple(newcshape)
 
-            # fft and write to destination dataset on disk
-            fft_data = da.fft.fft(data, axis=axis)
-            with ProgressBar():
-                fft_data.to_hdf5(fname,destdset, chunks=cshape, compression='lzf')
-        return 0
+                # rechunk dask array in order to perform fft
+                data = da.rechunk(data, newcshape)
+
+                with ProgressBar():
+                    out = data.compute()
+
+                # fft and write to destination dataset on disk
+                fft_data = da.fft.fft(data, axis=axis)
+                with ProgressBar():
+                    fft_data.to_hdf5(s,dst_dset, chunks=cshape, compression='lzf')
+            return 0
 
     # perform FFT along given axis, done out of core
     # multiple chunks that span the axis are read into RAM
