@@ -171,6 +171,7 @@ class analyser():
         if (src_fname == dst_fname):
             print('destination and source must be different files')
             return 1
+        
         with hd.File(src_fname, 'r') as s:
             with hd.File(dst_fname, 'w') as d:
             
@@ -189,14 +190,18 @@ class analyser():
 
                 # rechunk dask array in order to perform fft
                 data = da.rechunk(data, newcshape)
-
+                
+                # make optional background subtraction
+                if (background_subtraction == True):
+                    background = data[:,:,:,:,0]
+                    data = data - background[:,:,:,:,None]
                 with ProgressBar():
                     out = data.compute()
 
                 # fft and write to destination dataset on disk
                 fft_data = da.fft.fft(data, axis=axis)
                 with ProgressBar():
-                    fft_data.to_hdf5(s,dst_dset, chunks=cshape, compression='lzf')
+                    fft_data.to_hdf5(d,dst_dset, chunks=cshape, compression='lzf')
             return 0
 
     # perform FFT along given axis, done out of core
