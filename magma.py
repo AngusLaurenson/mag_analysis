@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import re
 import dask.array as da
 from dask.diagnostics import ProgressBar
+from tqdm import tqdm
 
 """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
 
@@ -144,16 +145,20 @@ class analyser():
             # There is a problem with data format supported by hdf5
 
         # go through the ovf files and populate the hdf file with the data
-        for n in range(len(ovf_files)):
+        for n in tqdm(range(len(ovf_files))):
             data, meta, raw = self.read_ovf(ovf_files[n])
             time.append(meta['time'])
-            with hd.File(hdf_name,'a') as f:)
+            with hd.File(hdf_name,'a') as f:
                 f['mag'][:,:,:,:,n] = data
 
         with hd.File(hdf_name,'a') as f:
             f.create_dataset('time', data = sp.array(time))
-            f.create_dataset('header', (len(header_encoded),1),'S10', header_encoded)
-
+            f.create_dataset('header', (len(header_encoded),1),'S30', header_encoded)
+            try:
+                f.create_dataset('meta', meta.data)
+            except:
+                print('failed to save metadata to disk')
+                    
         return 0
 
     # import dask.array as da
@@ -176,7 +181,7 @@ class analyser():
 
             # make a dask array from the dset
             data = da.from_array(f[srcdset], f[srcdset].chunks)
-
+            
             # weld chunks together to span the fft axis
             newcshape = sp.array(cshape)
             newcshape[axis] = dshape[axis]
