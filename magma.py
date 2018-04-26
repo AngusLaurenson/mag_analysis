@@ -158,7 +158,11 @@ class analyser():
                 f.create_dataset('meta', meta.data)
             except:
                 print('failed to save metadata to disk')
-                    
+        
+        # should include here a change in permission
+        # for the data.hdf5 file to be read only
+        # then should os.remove() all ovf files to save space on disk
+    
         return 0
 
     # import dask.array as da
@@ -166,43 +170,43 @@ class analyser():
     # perform a FFT along a given access using DASK module
     # which provide lazy evaluation for out of core work
     # useful for large data sets that exceed RAM capacity
-    def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis):
+    def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True):
         # open the hdf5 files
-        if (src_fname == dst_fname):
+        if (src_fname == dst_fname and src_dset == dst_dset):
             print('destination and source must be different files')
             return 1
         
         with hd.File(src_fname, 'r') as s:
-            with hd.File(dst_fname, 'w') as d:
+            #with hd.File(dst_fname, 'w') as d:
             
-                dshape = s[src_dset].shape; cshape = s[src_dset].chunks
+            dshape = s[src_dset].shape; cshape = s[src_dset].chunks
 
                 # create a destination dataset
-                d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
+                #d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
 
-                # make a dask array from the dset
-                data = da.from_array(s[src_dset], s[src_dset].chunks)
-                
-                # weld chunks together to span the fft axis
-                newcshape = sp.array(cshape)
-                newcshape[axis] = dshape[axis]
-                newcshape = tuple(newcshape)
+            # make a dask array from the dset
+            data = da.from_array(s[src_dset], s[src_dset].chunks)
+            
+            # weld chunks together to span the fft axis
+            newcshape = sp.array(cshape)
+            newcshape[axis] = dshape[axis]
+            newcshape = tuple(newcshape)
 
-                # rechunk dask array in order to perform fft
-                data = da.rechunk(data, newcshape)
-                
-                # make optional background subtraction
-                if (background_subtraction == True):
-                    background = data[:,:,:,:,0]
-                    data = data - background[:,:,:,:,None]
-                with ProgressBar():
-                    out = data.compute()
+            # rechunk dask array in order to perform fft
+            data = da.rechunk(data, newcshape)
+            
+            # make optional background subtraction
+            if (background_subtraction == True):
+                background = data[:,:,:,:,0]
+                data = data - background[:,:,:,:,None]
+            with ProgressBar():
+                out = data.compute()
 
-                # fft and write to destination dataset on disk
-                fft_data = da.fft.fft(data, axis=axis)
-                with ProgressBar():
-                    fft_data.to_hdf5(d,dst_dset, chunks=cshape, compression='lzf')
-            return 0
+            # fft and write to destination dataset on disk
+            fft_data = da.fft.fft(data, axis=axis)
+            with ProgressBar():
+                fft_data.to_hdf5(dst_fname,dst_dset)#, chunks=cshape, dtype=complex, compression='lzf')
+        return 0
 
     # perform FFT along given axis, done out of core
     # multiple chunks that span the axis are read into RAM
@@ -236,4 +240,29 @@ class analyser():
                 fft_chunk = sp.fft(chunk_data, axis = axis)
                 # write to disk
                 f[destdset][index] = fft_chunk
-        return 0
+        return 
+    
+    def calc_dispersion(src,dst,axis=0):
+        self.fft_dask(src,'mag','temp.hdf5','fft_1',-1)
+        self.fft_dask('temp.hdf5','fft_1','temp.hdf5','fft_2',axis)
+
+        with hd.File(dst,'w') as out:
+            with hd.File('temp.hdf5','r') as temp:
+                disp_dset = temp['fft_2']
+                disp_array = da.from_array(disp_data,chunks=temp['fft_2'].chunks)
+                dispersion = da.sum(sp.absolute(disp_array),
+                        axis=tuple([a for a in range(5) if a not in (axis, 4)])
+                        )
+                out.create_dataset('disp',data = dispersion)
+
+        # delete the intermediary values from longterm memory
+        os.remove('temp.hdf5')
+
+        # it is possible that this is the wrong approach as Dask Array might have
+        # better handling of out of core processes. I can see the name temp.hdf5
+        # might clash between simulations if they intrude on one anothers filespace
+
+    
+    
+    
+    0
