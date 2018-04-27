@@ -159,10 +159,12 @@ class analyser():
             except:
                 print('failed to save metadata to disk')
         
-        # should include here a change in permission
-        # for the data.hdf5 file to be read only
+        # change permissions data.hdf5 file to be read only
+        os.chmod(hdf_name, 444) 
+        
         # then should os.remove() all ovf files to save space on disk
-    
+        for ovf in ovfs:
+            os.remove(ovf)
         return 0
 
     # import dask.array as da
