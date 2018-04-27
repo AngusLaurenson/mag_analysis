@@ -179,7 +179,7 @@ class analyser():
             print('destination and source must be different files')
             return 1
         
-        with hd.File(src_fname, 'r') as s:
+        with hd.File(src_fname, 'a') as s:
             #with hd.File(dst_fname, 'w') as d:
             
             dshape = s[src_dset].shape; cshape = s[src_dset].chunks
@@ -243,20 +243,19 @@ class analyser():
                 fft_chunk = sp.fft(chunk_data, axis = axis)
                 # write to disk
                 f[destdset][index] = fft_chunk
-        return 
-    
-    def calc_dispersion(src,dst,axis=0):
+        return 0
+
+    def calc_dispersion(self, src,dst,axis=0):
         self.fft_dask(src,'mag','temp.hdf5','fft_1',-1)
         self.fft_dask('temp.hdf5','fft_1','temp.hdf5','fft_2',axis)
 
-        with hd.File(dst,'w') as out:
-            with hd.File('temp.hdf5','r') as temp:
-                disp_dset = temp['fft_2']
-                disp_array = da.from_array(disp_data,chunks=temp['fft_2'].chunks)
-                dispersion = da.sum(sp.absolute(disp_array),
-                        axis=tuple([a for a in range(5) if a not in (axis, 4)])
-                        )
-                out.create_dataset('disp',data = dispersion)
+        with hd.File('temp.hdf5','r') as temp:
+            disp_arr = da.from_array(temp['fft_2'],chunks=temp['fft_2'].chunks)
+            dispersion = da.sum(sp.absolute(disp_arr),
+                    axis = tuple([a for a in range(5) if a not in (axis,4)])
+                   ) 
+            dispersion.to_hdf5('dispersion.hdf5','disp')
+        
 
         # delete the intermediary values from longterm memory
         os.remove('temp.hdf5')
@@ -264,8 +263,4 @@ class analyser():
         # it is possible that this is the wrong approach as Dask Array might have
         # better handling of out of core processes. I can see the name temp.hdf5
         # might clash between simulations if they intrude on one anothers filespace
-
-    
-    
-    
-    0
+        return 0
