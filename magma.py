@@ -7,6 +7,7 @@ import re
 import dask.array as da
 from dask.diagnostics import ProgressBar
 from tqdm import tqdm
+import os
 
 """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
 
@@ -163,7 +164,7 @@ class analyser():
         os.chmod(hdf_name, 444) 
         
         # then should os.remove() all ovf files to save space on disk
-        for ovf in ovfs:
+        for ovf in ovf_files:
             os.remove(ovf)
         return 0
 
