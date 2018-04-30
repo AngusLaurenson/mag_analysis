@@ -139,9 +139,11 @@ class analyser():
         data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],3,len(ovf_files)])
         data_size = sp.prod(data_shape * int(meta['Binary']))
         time = []
-        # create the hdf file
-        with hd.File(hdf_name,'w') as f:
-            dset = f.create_dataset('mag', data_shape, dtype = sp.dtype('f'+str(int(meta['Binary']))), chunks=True)
+        
+        # create the hdf file if it doesnt exist
+        if (os.path.isfile(fname) == False):
+            with hd.File(hdf_name,'w') as f:
+                dset = f.create_dataset('mag', data_shape, dtype = sp.dtype('f'+str(int(meta['Binary']))), chunks=True)
 
             # want to add the meta data in but cannot seem to get it to work
             # There is a problem with data format supported by hdf5
@@ -175,18 +177,18 @@ class analyser():
     # which provide lazy evaluation for out of core work
     # useful for large data sets that exceed RAM capacity
     def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True, window = False):
-        # open the hdf5 files
-        if (src_fname == dst_fname and src_dset == dst_dset):
-            print('destination and source must be different files')
+        
+        if (src_fname == dst_fname):
+            print('must write to new .hdf5 file')
             return 1
         
+        # open the hdf5 files        
         with hd.File(src_fname, 'a') as s:
-            #with hd.File(dst_fname, 'w') as d:
-            
-            dshape = s[src_dset].shape; cshape = s[src_dset].chunks
+            with hd.File(dst_fname, 'w') as d:
 
-                # create a destination dataset
-                #d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
+                # create a destination dataset            
+                dshape = s[src_dset].shape; cshape = s[src_dset].chunks
+                d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
 
             # make a dask array from the dset
             data = da.from_array(s[src_dset], s[src_dset].chunks)
@@ -203,8 +205,6 @@ class analyser():
             if (background_subtraction == True):
                 background = data[:,:,:,:,0]
                 data = data - background[:,:,:,:,None]
-            with ProgressBar():
-                out = data.compute()
 
             # make optional windowing before fourier transform
             if (window != False):
@@ -217,7 +217,8 @@ class analyser():
                 except:
                     print('invalid window function, skipping windowing.\nLook up scipy.signal docs')
                     pass
-	    # fft and write to destination dataset on disk
+                
+            # fft and write to destination dataset on disk
             fft_data = da.fft.fft(data, axis=axis)
             with ProgressBar():
                 fft_data.to_hdf5(dst_fname,dst_dset)#, chunks=cshape, dtype=complex, compression='lzf')
@@ -257,11 +258,13 @@ class analyser():
                 f[destdset][index] = fft_chunk
         return 0
 
-    def calc_dispersion(self, src,dst,axis=0):
-        self.fft_dask(src,'mag','temp.hdf5','fft_1',-1)
-        self.fft_dask('temp.hdf5','fft_1','temp.hdf5','fft_2',axis)
+    def calc_dispersion(self, src,dst,axis=0, window=False):
+        temp_1 = '/'.join((folder,'temp1.hdf5'))
+        temp_2 = '/'.join((folder,'temp2.hdf5'))
+        self.fft_dask(src,'mag',temp_1,'fft_1',-1,window)
+        self.fft_dask(temp_1,'fft_1',temp_2,'fft_2',axis,window)
 
-        with hd.File('temp.hdf5','r') as temp:
+        with hd.File(temp_2,'r') as temp:
             disp_arr = da.from_array(temp['fft_2'],chunks=temp['fft_2'].chunks)
             dispersion = da.sum(sp.absolute(disp_arr),
                     axis = tuple([a for a in range(5) if a not in (axis,4)])
@@ -270,7 +273,8 @@ class analyser():
         
 
         # delete the intermediary values from longterm memory
-        os.remove('temp.hdf5')
+        os.remove('temp1.hdf5')
+        os.remove('temp2.hdf5')
 
         # it is possible that this is the wrong approach as Dask Array might have
         # better handling of out of core processes. I can see the name temp.hdf5
