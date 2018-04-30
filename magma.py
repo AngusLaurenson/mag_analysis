@@ -1,5 +1,6 @@
 # Analysis module
 import scipy as sp
+import scipy.signal as signal
 import h5py as hd
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -173,7 +174,7 @@ class analyser():
     # perform a FFT along a given access using DASK module
     # which provide lazy evaluation for out of core work
     # useful for large data sets that exceed RAM capacity
-    def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True):
+    def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True, window = False):
         # open the hdf5 files
         if (src_fname == dst_fname and src_dset == dst_dset):
             print('destination and source must be different files')
@@ -205,7 +206,18 @@ class analyser():
             with ProgressBar():
                 out = data.compute()
 
-            # fft and write to destination dataset on disk
+            # make optional windowing before fourier transform
+            if (window != False):
+                try:
+                    w = eval('signal.'+window+'(data.shape[axis])')
+                    dim_arr = sp.ones((1,w.ndim),int).ravel()
+                    dim_arr[axis] = -1
+                    window_reshaped = w.reshape(dim_arr)
+                    data = data * window_reshaped
+                except:
+                    print('invalid window function, skipping windowing.\nLook up scipy.signal docs')
+                    pass
+	    # fft and write to destination dataset on disk
             fft_data = da.fft.fft(data, axis=axis)
             with ProgressBar():
                 fft_data.to_hdf5(dst_fname,dst_dset)#, chunks=cshape, dtype=complex, compression='lzf')
