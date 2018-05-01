@@ -110,26 +110,14 @@ class analyser():
                 print('incorrect mode type; \n data, meta and all \n are the only valid modes, \n default is all')
                 return 1
 
-    # if the hdf file name is taken, don't overwrite
-    # put the ovf files into a list
-    # save function to save the state of the analyser object
-    # calibration function takes
-    def prelims(self, hdfname):
-        # get the important parameters of the simulation from
-        # the meta data from the ovf files and stuff
-        self.times = []
-        for n in self.ovfs:
-            meta = self.read_ovf(n, 'meta')
-            self.times.append(float(list(meta.keys())[15]))
-
-        # put meta data into a group for later
-        with hd.File(hdfname, 'a') as f:
-            # meta_data = f.create_group('meta')
-            times = f['meta'].create_dataset('times', data = self.times)
-            parameters = f['meta'].create_dataset('params', data = meta)
-
-    # save the magnetisation data from a list of ovf files
-    # into a hdf5 file, along with meta data etc
+    def ovf_to_npy(self, dst, ovfs=[]):
+        data = []
+        for ovf in tqdm(ovfs):
+            data.append(self.read_ovf(ovf, target='data'))
+        sp.concatenate(data,axis=-1)
+        sp.save(dst,data)
+        return 0
+    
     def ovf_to_hdf(self, hdf_name, ovf_files = []):
 
         # calculate the size and shape of the data we are dealing with
@@ -141,21 +129,22 @@ class analyser():
         time = []
         
         # create the hdf file if it doesnt exist
-        if (os.path.isfile(fname) == False):
-            with hd.File(hdf_name,'w') as f:
-                dset = f.create_dataset('mag', data_shape, dtype = sp.dtype('f'+str(int(meta['Binary']))), chunks=True)
+        #if (os.path.isfile(hdf_name) == True):
+        #   print('file exists')
+        #    return 1
+        with hd.File(hdf_name,'w') as f:
+            dset = f.create_dataset('mag', data_shape, dtype = sp.dtype('f'+str(int(meta['Binary']))), chunks=True)
 
             # want to add the meta data in but cannot seem to get it to work
             # There is a problem with data format supported by hdf5
 
         # go through the ovf files and populate the hdf file with the data
-        for n in tqdm(range(len(ovf_files))):
-            data, meta, raw = self.read_ovf(ovf_files[n])
-            time.append(meta['time'])
-            with hd.File(hdf_name,'a') as f:
+            for n in tqdm(range(len(ovf_files))):
+                data, meta, raw = self.read_ovf(ovf_files[n])
+                time.append(meta['time'])
                 f['mag'][:,:,:,:,n] = data
 
-        with hd.File(hdf_name,'a') as f:
+        #with hd.File(hdf_name,'a') as f:
             f.create_dataset('time', data = sp.array(time))
             f.create_dataset('header', (len(header_encoded),1),'S30', header_encoded)
             try:
@@ -167,8 +156,8 @@ class analyser():
         os.chmod(hdf_name, 444) 
         
         # then should os.remove() all ovf files to save space on disk
-        for ovf in ovf_files:
-            os.remove(ovf)
+        #for ovf in ovf_files:
+        #    os.remove(ovf)
         return 0
 
     # import dask.array as da
@@ -259,16 +248,17 @@ class analyser():
         return 0
 
     def calc_dispersion(self, src,dst,axis=0, window=False):
-        temp_1 = '/'.join((folder,'temp1.hdf5'))
-        temp_2 = '/'.join((folder,'temp2.hdf5'))
-        self.fft_dask(src,'mag',temp_1,'fft_1',-1,window)
-        self.fft_dask(temp_1,'fft_1',temp_2,'fft_2',axis,window)
+        self.fft_dask(src,'mag','temp1.hdf5','fft_1',-1,window)
+        self.fft_dask('temp1.hdf5','fft_1','temp2.hdf5','fft_2',axis,window)
 
-        with hd.File(temp_2,'r') as temp:
+        with hd.File('temp2.hdf5','r') as temp:
             disp_arr = da.from_array(temp['fft_2'],chunks=temp['fft_2'].chunks)
             dispersion = da.sum(sp.absolute(disp_arr),
                     axis = tuple([a for a in range(5) if a not in (axis,4)])
                    ) 
+            with hd.File('dispersion.hdf5','w') as d:
+                pass
+            
             dispersion.to_hdf5('dispersion.hdf5','disp')
         
 
@@ -280,3 +270,25 @@ class analyser():
         # better handling of out of core processes. I can see the name temp.hdf5
         # might clash between simulations if they intrude on one anothers filespace
         return 0
+
+    
+       # if the hdf file name is taken, don't overwrite
+    # put the ovf files into a list
+    # save function to save the state of the analyser object
+    # calibration function takes
+    def prelims(self, hdfname):
+        # get the important parameters of the simulation from
+        # the meta data from the ovf files and stuff
+        self.times = []
+        for n in self.ovfs:
+            meta = self.read_ovf(n, 'meta')
+            self.times.append(float(list(meta.keys())[15]))
+
+        # put meta data into a group for later
+        with hd.File(hdfname, 'a') as f:
+            # meta_data = f.create_group('meta')
+            times = f['meta'].create_dataset('times', data = self.times)
+            parameters = f['meta'].create_dataset('params', data = meta)
+
+    # save the magnetisation data from a list of ovf files
+    # into a hdf5 file, along with meta data etc
