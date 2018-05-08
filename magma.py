@@ -96,7 +96,7 @@ class analyser():
 
             # infer the data shape and read in the magnetisation data
             # reshape the data into array of the simulation
-            data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],3], dtype = int)
+            data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],meta['valuedim']], dtype = int)
             data = sp.fromstring(f.read(sp.prod(data_shape)*int(meta['Binary'])), dtype=sp.float32)
             data = data.reshape(data_shape, order='c')
 
@@ -124,7 +124,7 @@ class analyser():
         meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
 
-        data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],3,len(ovf_files)])
+        data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],meta['valuedim'],len(ovf_files)])
         data_size = sp.prod(data_shape * int(meta['Binary']))
         time = []
         
