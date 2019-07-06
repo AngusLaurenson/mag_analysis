@@ -1,5 +1,6 @@
 # Analysis module
 import scipy as sp
+from scipy import fftpack
 import scipy.signal as signal
 import h5py as hd
 import pandas as pd
@@ -9,6 +10,7 @@ import dask.array as da
 from dask.diagnostics import ProgressBar
 from tqdm import tqdm
 import os
+import colorcet
 
 """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
 
@@ -96,7 +98,7 @@ class analyser():
 
             # infer the data shape and read in the magnetisation data
             # reshape the data into array of the simulation
-            data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],meta['valuedim']], dtype = int)
+            data_shape = sp.array([meta['znodes'],meta['ynodes'],meta['xnodes'],meta['valuedim']], dtype = int)
             data = sp.fromstring(f.read(sp.prod(data_shape)*int(meta['Binary'])), dtype=sp.float32)
             data = data.reshape(data_shape, order='c')
 
@@ -110,6 +112,29 @@ class analyser():
                 print('incorrect mode type; \n data, meta and all \n are the only valid modes, \n default is all')
                 return 1
 
+    ######## INPUT METHODS #######
+    
+    # this function is slow because concatentation requires finding
+    # a contiguous piece of physical memory, better to allocate in advance
+    def ovf_to_array(self, ovfs=[]):
+        data = []
+        for ovf in tqdm(ovfs):
+            data.append(self.read_ovf(ovf, target='data'))
+        sp.concatenate(data,axis=-1)
+        return data
+
+    def ovf_to_array_new(self, ovfs=[]):
+        meta, header = self.read_ovf(ovfs[0], target='meta')
+        for n in ['xnodes','valuedim']:
+            print(meta[n])
+
+        data_shape = sp.array([meta['znodes'],meta['ynodes'],meta['xnodes'],meta['valuedim'],len(ovfs)],dtype=int)
+        print(data_shape)
+        data = sp.empty(tuple(data_shape),dtype=sp.float32)
+        for t in tqdm(range(len(ovfs))):
+            data[:,:,:,:,t] = self.read_ovf(ovfs[t],target='data')
+        return(data)
+ 
     def ovf_to_npy(self, dst, ovfs=[]):
         data = []
         for ovf in tqdm(ovfs):
@@ -124,7 +149,7 @@ class analyser():
         meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
 
-        data_shape = sp.array([meta['xnodes'],meta['ynodes'],meta['znodes'],meta['valuedim'],len(ovf_files)])
+        data_shape = sp.array([meta['znodes'],meta['ynodes'],meta['xnodes'],meta['valuedim'],len(ovf_files)])
         data_size = sp.prod(data_shape * int(meta['Binary']))
         time = []
         
@@ -132,19 +157,37 @@ class analyser():
         #if (os.path.isfile(hdf_name) == True):
         #   print('file exists')
         #    return 1
-        with hd.File(hdf_name,'w') as f:
+        with hd.File(hdf_name,'w',libver='latest') as f:
             dset = f.create_dataset('mag', data_shape, dtype = sp.dtype('f'+str(int(meta['Binary']))), chunks=True)
 
             # want to add the meta data in but cannot seem to get it to work
             # There is a problem with data format supported by hdf5
 
         # go through the ovf files and populate the hdf file with the data
-            for n in tqdm(range(len(ovf_files))):
-                data, meta, raw = self.read_ovf(ovf_files[n])
+            chunk_time_length = dset.chunks[-1]
+            data_shape = dset.shape
+            chunk_number = data_shape[-1] / chunk_time_length
+            chunk_shape = dset.chunks
+            
+        # Close the hdf5 file at every opportunity
+        # According to docs: https://support.hdfgroup.org/HDF5/faq/perfissues.html
+        # a memory leak can occur when writing to the same file many times in a loop
+        
+        # prepare an array of all the data in one time chunk
+        for c in tqdm(range(int(sp.ceil(chunk_number)))):
+            temp_arr = sp.zeros((data_shape[0],data_shape[1],data_shape[2],data_shape[3],chunk_shape[-1]))
+            
+            # fill the temp array with data from ovf files
+            for n in range(chunk_time_length):
+                temp_arr[:,:,:,:,n], meta, raw = self.read_ovf(ovf_files[chunk_time_length*c + n])
                 time.append(meta['time'])
-                f['mag'][:,:,:,:,n] = data
+            
+            # open hdf5 file, write the time chunk to disk, close hdf5 file
+            with hd.File(hdf_name,'r+',libver="latest") as f:
+                f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
 
-        #with hd.File(hdf_name,'a') as f:
+        # Append to the hdf5 file additional meta data
+        with hd.File(hdf_name,'a',libver='latest') as f:
             f.create_dataset('time', data = sp.array(time))
             f.create_dataset('header', (len(header_encoded),1),'S30', header_encoded)
             try:
@@ -160,20 +203,24 @@ class analyser():
         #    os.remove(ovf)
         return 0
 
-    # import dask.array as da
-    # from dask.diagnostics import ProgressBar
-    # perform a FFT along a given access using DASK module
-    # which provide lazy evaluation for out of core work
-    # useful for large data sets that exceed RAM capacity
+    ########## FOURIER ANALYSIS METHODS ###########
+
+
     def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True, window = False):
-        
+        '''
+        # import dask.array as da
+        # from dask.diagnostics import ProgressBar
+        # perform a FFT along a given access using DASK module
+        # which provide lazy evaluation for out of core work
+        # useful for large data sets that exceed RAM capacity
+        '''
         if (src_fname == dst_fname):
             print('must write to new .hdf5 file')
             return 1
         
         # open the hdf5 files        
-        with hd.File(src_fname, 'a') as s:
-            with hd.File(dst_fname, 'w') as d:
+        with hd.File(src_fname, 'a', libver='latest') as s:
+            with hd.File(dst_fname, 'w', libver='latest') as d:
 
                 # create a destination dataset            
                 dshape = s[src_dset].shape; cshape = s[src_dset].chunks
@@ -218,7 +265,7 @@ class analyser():
     # data is processed and then written to disk iteratively
     def fft_no_dask(self, fname, srcdset, destdset, axis):
         # open the hdf5 file
-        with hd.File(fname, 'a') as f:
+        with hd.File(fname, 'a', libver='latest') as f:
 
             # get the dimensions of the problem
             dshape = f[srcdset].shape; cshape = f[srcdset].chunks
@@ -247,30 +294,50 @@ class analyser():
                 f[destdset][index] = fft_chunk
         return 0
 
-    def calc_dispersion(self, src,dst,axis=0, window=False):
-        self.fft_dask(src,'mag','temp1.hdf5','fft_1',-1,window)
-        self.fft_dask('temp1.hdf5','fft_1','temp2.hdf5','fft_2',axis,window)
+    def calc_dispersion(self, src,dst,axis=2, window=False, save_frequencies=False):
+        # t to f
+        self.fft_dask(src,'mag','f_mag.hdf5','fft_1',-1,window)
+        # x to k
+        self.fft_dask('f_mag.hdf5','fft_1','temp2.hdf5','fft_2',axis,window)
 
-        with hd.File('temp2.hdf5','r') as temp:
+        with hd.File('temp2.hdf5','r', libver='latest') as temp:
             disp_arr = da.from_array(temp['fft_2'],chunks=temp['fft_2'].chunks)
             dispersion = da.sum(sp.absolute(disp_arr),
                     axis = tuple([a for a in range(5) if a not in (axis,4)])
                    ) 
-            with hd.File('dispersion.hdf5','w') as d:
+            with hd.File(dst,'w', libver='latest') as d:
                 pass
             
-            dispersion.to_hdf5('dispersion.hdf5','disp')
+            dispersion.to_hdf5(dst,'disp')
         
 
         # delete the intermediary values from longterm memory
-        os.remove('temp1.hdf5')
-        os.remove('temp2.hdf5')
+        if save_frequencies:
+            os.remove('temp2.hdf5')
+        else:
+            os.remove('temp1.hdf5')
+            os.remove('temp2.hdf5')
 
         # it is possible that this is the wrong approach as Dask Array might have
         # better handling of out of core processes. I can see the name temp.hdf5
         # might clash between simulations if they intrude on one anothers filespace
         return 0
-
+    
+    def calc_dispersion_npy(self, src, dst, axis=1):
+        data = sp.load(src)
+        background = data[0,:,:,:,:]
+        data = data - background[None,:,:,:,:]
+        disp = sp.sum(
+            sp.absolute(
+                fftpack.fftshift(
+                    fftpack.fft2(data, axes=(0,axis)),
+                    axes=(0,axis)
+                )
+            ),
+            axis = tuple([a for a in range(5) if a not in (axis,0)])
+        )
+        sp.save(dst, disp)
+        return 0
     
        # if the hdf file name is taken, don't overwrite
     # put the ovf files into a list
@@ -285,10 +352,37 @@ class analyser():
             self.times.append(float(list(meta.keys())[15]))
 
         # put meta data into a group for later
-        with hd.File(hdfname, 'a') as f:
+        with hd.File(hdfname, 'a', libver='latest') as f:
             # meta_data = f.create_group('meta')
             times = f['meta'].create_dataset('times', data = self.times)
             parameters = f['meta'].create_dataset('params', data = meta)
 
     # save the magnetisation data from a list of ovf files
     # into a hdf5 file, along with meta data etc
+
+
+    def wannier_zeeman(self, data, taxis=0, xaxis=1, zaxis=2):
+        temp  = sp.sum(data, axis=zaxis)
+        temp  = fftpack.fft(temp, axis=taxis)
+        sp.save("freq_x.npy",temp)
+        temp = fftpack.fft(temp,axis=xaxis)
+        sp.save("disp.npy",temp)
+        return 0
+
+    
+def phase_amp_filter(data):
+    '''Get cyclic color map for phase scaled in intensity by amplitude. Requires complex input'''
+    norm = plt.Normalize()
+    phase_colors = colorcet.cm['cyclic_mygbm_30_95_c78_s25'](norm(sp.angle(data)))
+
+    # Map the real data to a greyscale colormap
+    # print(sp.absolute(raw_data.real).max)
+    norm = plt.Normalize()
+    amplitude_colors = colorcet.cm['linear_grey_10_95_c0'](norm(sp.absolute(data)))
+    
+    phase_amp = phase_colors*amplitude_colors
+    
+    if phase_amp.dtype != sp.uint8:
+            phase_amp = (255*phase_amp).astype(sp.uint8)
+
+    return phase_amp
