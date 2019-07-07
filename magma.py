@@ -183,8 +183,8 @@ class analyser():
                     time.append(meta['time'])
 
                 # open hdf5 file, write the time chunk to disk, close hdf5 file
-                # with hd.File(hdf_name,'r+',libver="latest") as f:
-                f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
+                with hd.File(hdf_name,'r+',libver="latest") as f:
+                    f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
 
         # Append to the hdf5 file additional meta data
         with hd.File(hdf_name,'a',libver='latest') as f:
