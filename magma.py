@@ -173,17 +173,17 @@ class analyser():
         # According to docs: https://support.hdfgroup.org/HDF5/faq/perfissues.html
         # a memory leak can occur when writing to the same file many times in a loop
         
-        # prepare an array of all the data in one time chunk
-        for c in tqdm(range(int(sp.ceil(chunk_number)))):
-            temp_arr = sp.zeros((data_shape[0],data_shape[1],data_shape[2],data_shape[3],chunk_shape[-1]))
-            
-            # fill the temp array with data from ovf files
-            for n in range(chunk_time_length):
-                temp_arr[:,:,:,:,n], meta, raw = self.read_ovf(ovf_files[chunk_time_length*c + n])
-                time.append(meta['time'])
-            
-            # open hdf5 file, write the time chunk to disk, close hdf5 file
-            with hd.File(hdf_name,'r+',libver="latest") as f:
+            # prepare an array of all the data in one time chunk
+            for c in tqdm(range(int(sp.ceil(chunk_number)))):
+                temp_arr = sp.zeros((data_shape[0],data_shape[1],data_shape[2],data_shape[3],chunk_shape[-1]))
+
+                # fill the temp array with data from ovf files
+                for n in range(chunk_time_length):
+                    temp_arr[:,:,:,:,n], meta, raw = self.read_ovf(ovf_files[chunk_time_length*c + n])
+                    time.append(meta['time'])
+
+                # open hdf5 file, write the time chunk to disk, close hdf5 file
+                # with hd.File(hdf_name,'r+',libver="latest") as f:
                 f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
 
         # Append to the hdf5 file additional meta data

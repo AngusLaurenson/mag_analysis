@@ -1,6 +1,7 @@
 # mag_analysis
 This project is to build a custom module for analysing time series data for magnetisation dynamics. The aim is to read in raw magnetisation data and calculate properties of interest such as dispersion of spin waves, profile of modes, magnetisation texture, permeability etc.
 
+<<<<<<< HEAD
 #### Issues
 
 The read_ovf() function takes a long time to read data from the ovf files when 
@@ -18,3 +19,8 @@ efficiently write and read data.
 
 * add plotting of phase amplitude maps
 * switch h5py to h5py_cache in order to increase cache to fit a whole chunk
+=======
+#### Wishlist
+
+* permeability calculations
+>>>>>>> master
