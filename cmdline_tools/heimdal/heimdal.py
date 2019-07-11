@@ -51,6 +51,6 @@ while True:
 	time.sleep(5)
 	# check if any old jobs are still in the jobs dictionary
 	# if so, delete them to avoid a memory leak
-	for key in jobs.keys():
+	for key in list(jobs.keys()):
 		if key not in job_list:
 			del jobs[key]
