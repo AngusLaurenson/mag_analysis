@@ -28,6 +28,9 @@ import os
 import matplotlib.pyplot as plt
 import colorcet
 
+# for command line arguments
+import argparse
+
 """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from .ovf file format, within a jupyter notebook's python environment.
 
 The idea is to first store the data from the simulation in a hdf5 file with compression.
@@ -52,10 +55,10 @@ class analyser():
     - visualisation of modes in frequency, realspace domain using a cyclic colour map and intensity scale'''
 
     ######## INPUT METHODS #######
-    
+
     def read_ovf(self, fname, target = 'all'):
         "Read the conents of a .ovf file"
-        
+
         # open .ovf file
         with open(fname,'rb') as f:
             # initialise lists for the key value pairs
@@ -99,11 +102,11 @@ class analyser():
             else:
                 print('incorrect mode type; \n data, meta and all \n are the only valid modes, \n default is all')
                 return 1
-   
+
     def ovf_to_array_new(self, ovfs=[]):
         """Load the data from multiple ovf files into a single array in memory.
         Takes a list of ovf file names and returns a scipy/numpy array"""
-        
+
         meta, header = self.read_ovf(ovfs[0], target='meta')
         for n in ['xnodes','valuedim']:
             print(meta[n])
@@ -114,7 +117,7 @@ class analyser():
         for t in tqdm(range(len(ovfs))):
             data[:,:,:,:,t] = self.read_ovf(ovfs[t],target='data')
         return(data)
- 
+
     def ovf_to_npy(self, dst, ovfs=[]):
         """Load the data from multiple .ovf files into memory, then save them into a single .npy file"""
         data = []
@@ -123,11 +126,17 @@ class analyser():
         sp.concatenate(data,axis=-1)
         sp.save(dst,data)
         return 0
-    
-    def ovf_to_hdf(self, hdf_name, ovf_files = [], delete_ovfs=False):
+
+    def ovf_to_hdf(self, hdf_name, ovf_files = [], delete_ovfs=False, overwrite=False):
         """Load the data from multiple .ovf files into a chunked .hdf5 file.
         This method is useful when the size of the simulation data is too large fit into RAM"""
-        
+
+        # check if destination file already exists and whether to overwrite
+        if (os.path.isfile(hdf_name)) & (overwrite==False):
+            print('file already exists. Set kwarg "overwrite=True" to overwrite existing file. Aborting...')
+            return 0
+
+
         # calculate the size and shape of the data we are dealing with
         meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
@@ -135,7 +144,7 @@ class analyser():
         data_shape = sp.array([meta['znodes'],meta['ynodes'],meta['xnodes'],meta['valuedim'],len(ovf_files)])
         data_size = sp.prod(data_shape * int(meta['Binary']))
         time = []
-        
+
         # create the hdf file if it doesnt exist
         #if (os.path.isfile(hdf_name) == True):
         #   print('file exists')
@@ -158,7 +167,7 @@ class analyser():
             print("creating dataset")
             print("shape ", dset.shape)
             print("chunks ", dset.chunks)
-            
+
             # prepare an array of all the data in one time chunk
             for c in tqdm(range(int(sp.ceil(chunk_number)))):
                 temp_arr = sp.zeros((data_shape[0],data_shape[1],data_shape[2],data_shape[3],chunk_shape[-1]))
@@ -171,20 +180,20 @@ class analyser():
                 except:
                     # This catches the unexpected case where the chunk length in time
                     # does not perfectly divide the length of ovf list
-                    
+
                     temp = list(map(self.read_ovf,ovf_files[chunk_time_length*c:]))
                     temp_arr = sp.stack([a[0] for a in temp], axis=-1)
-                    
-                    
+
+
                 # open hdf5 file, write the time chunk to disk, close hdf5 file
                 with hd.File(hdf_name,'r+',libver="latest") as f:
                     f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
-            
+
                 # optionally delete the ovf files as they are written to hdf5
                 if delete_ovfs == True:
                     for n in range(chunk_time_length):
                         os.remove(ovf_files[chunk_time_length*c + n])
-            
+
         # Append to the hdf5 file additional meta data
         with hd.File(hdf_name,'a',libver='latest') as f:
             f.create_dataset('time', data = sp.array(time))
@@ -193,10 +202,10 @@ class analyser():
                 f.create_dataset('meta', meta.data)
             except:
                 print('failed to save metadata to disk')
-        
+
         # change permissions data.hdf5 file to be read only
-        os.chmod(hdf_name, 444) 
-        
+        os.chmod(hdf_name, 444)
+
         # then should os.remove() all ovf files to save space on disk
         #for ovf in ovf_files:
         #    os.remove(ovf)
@@ -211,27 +220,27 @@ class analyser():
         Allows FFT to be performed on large datasets that do not fit into memory.
         Takes the source .hdf5 file name and dataset as well as th destination file name and dataset as inputs.
         """
-        
+
         if (src_fname == dst_fname):
             print('must write to new .hdf5 file')
             return 1
-        
-        
-        # open the hdf5 files        
+
+
+        # open the hdf5 files
         with hd.File(src_fname, 'r', libver='latest') as s:
             with hd.File(dst_fname, 'w', libver='latest') as d:
 
-                # create a destination dataset            
+                # create a destination dataset
                 dshape = s[src_dset].shape; cshape = s[src_dset].chunks
                 d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
 
         # CAN WE CLOSE THE FILES HERE AND REOPEN THEM LATER?
-        
+
         with hd.File(src_fname,'r',libver='latest') as s:
-        
+
             # make a dask array from the dset
             data = da.from_array(s[src_dset], s[src_dset].chunks)
-            
+
             # weld chunks together to span the fft axis
             newcshape = sp.array(cshape)
             newcshape[axis] = dshape[axis]
@@ -239,7 +248,7 @@ class analyser():
 
             # rechunk dask array in order to perform fft
             data = da.rechunk(data, newcshape)
-            
+
             # make optional background subtraction
             if (background_subtraction == True):
                 background = data[:,:,:,:,0]
@@ -256,11 +265,11 @@ class analyser():
                 except:
                     print('invalid window function, skipping windowing.\nLook up scipy.signal docs')
                     pass
-                
+
             # fft and write to destination dataset on disk
             fft_data = da.fft.fft(data, axis=axis)
             fft_data.dtype = 'complex64'
-            
+
             with ProgressBar():
                 fft_data.to_hdf5(dst_fname,dst_dset, libver='latest')#, chunks=cshape, dtype=complex, compression='lzf')
         return 0
@@ -272,7 +281,7 @@ class analyser():
         """Perform an FFT on a .hdf5 dataset along a given axis.
         This takes an .hdf5 input file and dataset, loads the data into memory,
         performs and FFT and creates a new dataset in the .hdf5 file in which to save the result"""
-        
+
         # open the hdf5 file
         with hd.File(fname, 'a', libver='latest') as f:
 
@@ -313,12 +322,12 @@ class analyser():
             disp_arr = da.from_array(temp['fft_2'],chunks=temp['fft_2'].chunks)
             dispersion = da.sum(sp.absolute(disp_arr),
                     axis = tuple([a for a in range(5) if a not in (axis,4)])
-                   ) 
+                   )
             with hd.File(dst,'w', libver='latest') as d:
                 pass
-            
+
             dispersion.to_hdf5(dst,'disp')
-        
+
 
         # delete the intermediary values from longterm memory
         if save_frequencies:
@@ -328,7 +337,7 @@ class analyser():
             os.remove('temp2.hdf5')
 
         return 0
-    
+
     def calc_dispersion_npy(self, src, dst, axis=1):
         data = sp.load(src)
         background = data[0,:,:,:,:]
@@ -344,7 +353,7 @@ class analyser():
         )
         sp.save(dst, disp)
         return 0
-    
+
        # if the hdf file name is taken, don't overwrite
     # put the ovf files into a list
     # save function to save the state of the analyser object
@@ -375,7 +384,7 @@ class analyser():
         sp.save("disp.npy",temp)
         return 0
 
-    
+
 def phase_amp_filter(data):
     '''Get cyclic color map for phase scaled in intensity by amplitude. Requires complex input'''
     norm = plt.Normalize()
@@ -385,10 +394,72 @@ def phase_amp_filter(data):
     # print(sp.absolute(raw_data.real).max)
     norm = plt.Normalize()
     amplitude_colors = colorcet.cm['linear_grey_10_95_c0'](norm(sp.absolute(data)))
-    
+
     phase_amp = phase_colors*amplitude_colors
-    
+
     if phase_amp.dtype != sp.uint8:
             phase_amp = (255*phase_amp).astype(sp.uint8)
 
     return phase_amp
+
+''' main loop for use as a command line tool '''
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('function', metavar='f', type=str, nargs=1
+                        help='available functions: "ovf_to_hdf", "fft_dask"'
+                        )
+
+    parser.add_argument('-i','--input', nargs=1,
+                        help='unix file matching pattern i.e. "*.ovf" for all ovfs in the current working directory')
+
+    parser.add_argument('-o','--output', type=str, nargs=1,
+                        help='name of output file, i.e. "mag_data.hdf5"')
+
+    parser.add_argument('--delete_ovfs', type=bool, nargs=1,
+                        help='boolean (True or False) option to delete ovf files after wrtiting them to hdf5, only works for ovf_to_hdf function.')
+
+    parser.add_argument('--overwrite', type=bool, nargs=1,
+                        help='boolean (True or False) option to overwrite the output file if it already exists')
+
+    parser.add_argument('--dst_dset',type=str,
+    help='source dataset')
+    parser.add_argument('--src_dset',type=str,
+    help='destination dataset')
+    parser.add_argument('-a','--axis', type=int, nargs=1,
+                        help='axis to apply fft along')
+
+    args = parser.parse_args()
+
+    # create an analyser object
+    a = analyser()
+
+    if args.function == 'ovf_to_hdf':
+        a.ovf_to_hdf(hdf_name=args.ouput,
+                     ovf_files = glob(args.input),
+                     delete_ovfs=bool(args.delete_ovfs),
+                     overwrite=bool(args.overwrite),
+                     )
+
+    elif args.function == 'fft_dask':
+
+        # make a guess input
+        try:
+            src_dset = args.src_dset
+        except:
+            src_dset = 'mag'
+
+        # make a default dst_dset
+        try:
+            dst_dset = args.dst_dset
+        except:
+            dst_dset = 'fft_mag'
+
+        a.fft_dask(args.input, src_dset, args.output, dst_dset, args.axis)
+
+    else:
+        print('''no valid function supplied. Options are
+        "ovf_to_hdf", which takes a unix file matching expression, like "./path/to/files/*.ovf
+        "fft_dask": which takes input file and dataset, does fft along given axis and writes to output file and dataset using out of core fft''')
+
+    exit()
