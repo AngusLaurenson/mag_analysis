@@ -436,7 +436,7 @@ if __name__ == '__main__':
     a = analyser()
 
     if args.function == 'ovf_to_hdf':
-        a.ovf_to_hdf(hdf_name=args.ouput,
+        a.ovf_to_hdf(hdf_name=args.output,
                      ovf_files = glob(args.input),
                      delete_ovfs=bool(args.delete_ovfs),
                      overwrite=bool(args.overwrite),
