@@ -406,20 +406,20 @@ def phase_amp_filter(data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('function', metavar='f', type=str, nargs=1,
+    parser.add_argument('function',
                         help='available functions: "ovf_to_hdf", "fft_dask"'
                         )
 
-    parser.add_argument('-i','--input', nargs=1,
+    parser.add_argument('-i','--input',
                         help='unix file matching pattern i.e. "*.ovf" for all ovfs in the current working directory')
 
-    parser.add_argument('-o','--output', type=str, nargs=1,
+    parser.add_argument('-o','--output', type=str,
                         help='name of output file, i.e. "mag_data.hdf5"')
 
-    parser.add_argument('--delete_ovfs', type=bool, nargs=1,
+    parser.add_argument('--delete_ovfs', type=bool,
                         help='boolean (True or False) option to delete ovf files after wrtiting them to hdf5, only works for ovf_to_hdf function.')
 
-    parser.add_argument('--overwrite', type=bool, nargs=1,
+    parser.add_argument('--overwrite', type=bool,
                         help='boolean (True or False) option to overwrite the output file if it already exists')
 
     parser.add_argument('--dst_dset',type=str,
