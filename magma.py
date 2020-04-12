@@ -406,7 +406,7 @@ def phase_amp_filter(data):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('function', metavar='f', type=str, nargs=1
+    parser.add_argument('function', metavar='f', type=str, nargs=1,
                         help='available functions: "ovf_to_hdf", "fft_dask"'
                         )
 
