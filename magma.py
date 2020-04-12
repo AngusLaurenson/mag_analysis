@@ -1,74 +1,62 @@
-# Analysis module
+# IMPORT DEPENDENCIES
+
+# scipy for numerical work
 import scipy as sp
 from scipy import fftpack
 import scipy.signal as signal
+
+# for hdf5 files
 import h5py as hd
+
+# handling table data
 import pandas as pd
-import matplotlib.pyplot as plt
+
+# regex for filtering strings
 import re
+
+# for out of core processing
 import dask.array as da
 from dask.diagnostics import ProgressBar
+
+# progress bar on for loops
 from tqdm import tqdm
+
+# find files and more
 import os
+
+# plotting
+import matplotlib.pyplot as plt
 import colorcet
 
-"""Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from ovf file format, within a jupyter notebook's python environment.
+"""Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from .ovf file format, within a jupyter notebook's python environment.
 
-    The idea is to first store the data from the simulation in a hdf5 file with compression.
+The idea is to first store the data from the simulation in a hdf5 file with compression.
      ___________
     | OVF files | read ovf files           HDF5 File
-    |___________| ------------->       ________|_________
-    |___________|                     |                  |
+    |___________| ------------->      ________|_________
+    |___________|                    |                  |
                                    Vector              Meta
                                    fields              data
                             ________|_______          ___|_____
                            |                |        |         |
-                        m[x,y,z,c,t]  m[x,y,z,c,w]  [times]  {params}
+                        m[x,y,z,c,t]  m[x,y,z,c,w]  [times]  [params]
 
-    The module itself focused around an analyser object
+The analyser object has many methods to read ovf files and save them as .npy or .hdf5 files and to analyse data in hdf5 files which is too large to fit into the memory at once.
 
-                                      Analyser
-                     ____________________|____________________
-                    |                                         |
-                attributes                                 methods
-          __________|____________             ________________|_________
-         |           |           |           |          |               |
-      list of    number of      time        read       hdf5          Fourier
-     ovf files   dimensions    stamps    ovf file    interfaces    Analysis
+The idea is that for one simulation, the simulation is done by one analyser object. To do this all relevant ovf files are passed to an instance. On setup the time stamps and other meta data are collected from the ovf files. Then the user can use various functions to make fourier analysis of the data sets. """
 
-    The idea is that for one simulation, the simulation is done by one analyser object. To do this all relevant ovf files are passed to an instance. On setup the time stamps and other meta data are collected from the ovf files. Then the user can use various functions to make fourier analysis of the data sets. Ultimately I want to add the visualisation of mode profile and calculation of dispersion relations."""
-
-# Analyser object to contain the analysis in one place
-# and avoid cross contamination of analysis of seperate
-# datasets in the same jupyter notebook
-
-
-# setup function takes the list of ovf files for the simulation
-# and hdf5 file name. It looks for existing hdf file
-# def __init__(self, previous_self = None):
-#     super(analyser, self).__init__()
-#     pass
-# if previous self is defined load that
-# self.load(previous_self)
-
-# otherwise just do nothing
-
-# function to load a pickle file of a previous
-# version of the analyser object. Useful for
-# revisiting analysis
-# def load_state(self, previous_self):
-
-# save the state of the analyser object in a
-# pickle file
-# def save_state(self, fname):
 class analyser():
+    '''an object which contains methos for analysing micromagnetic simulation data:
+    - read ovf files into .npy or chunked .hdf5 files
+    - perform fourier analysis, including for data in .hdf5 files which cannot fit into the memory in one piece
+    - visualisation of modes in frequency, realspace domain using a cyclic colour map and intensity scale'''
 
-    ''' ####################### METHODS ######################### '''
-    # function that reads ovf files and returns your choice of
-    # meta data in a dictionary & the raw header in a list
-    # and / or the magnetisation data in an array
+    ######## INPUT METHODS #######
+    
     def read_ovf(self, fname, target = 'all'):
-        # open the file
+        "Read the conents of a .ovf file"
+        
+        # open .ovf file
         with open(fname,'rb') as f:
             # initialise lists for the key value pairs
             keys = []; values = [];
@@ -111,19 +99,11 @@ class analyser():
             else:
                 print('incorrect mode type; \n data, meta and all \n are the only valid modes, \n default is all')
                 return 1
-
-    ######## INPUT METHODS #######
-    
-    # this function is slow because concatentation requires finding
-    # a contiguous piece of physical memory, better to allocate in advance
-    def ovf_to_array(self, ovfs=[]):
-        data = []
-        for ovf in tqdm(ovfs):
-            data.append(self.read_ovf(ovf, target='data'))
-        sp.concatenate(data,axis=-1)
-        return data
-
+   
     def ovf_to_array_new(self, ovfs=[]):
+        """Load the data from multiple ovf files into a single array in memory.
+        Takes a list of ovf file names and returns a scipy/numpy array"""
+        
         meta, header = self.read_ovf(ovfs[0], target='meta')
         for n in ['xnodes','valuedim']:
             print(meta[n])
@@ -136,6 +116,7 @@ class analyser():
         return(data)
  
     def ovf_to_npy(self, dst, ovfs=[]):
+        """Load the data from multiple .ovf files into memory, then save them into a single .npy file"""
         data = []
         for ovf in tqdm(ovfs):
             data.append(self.read_ovf(ovf, target='data'))
@@ -143,8 +124,10 @@ class analyser():
         sp.save(dst,data)
         return 0
     
-    def ovf_to_hdf(self, hdf_name, ovf_files = []):
-
+    def ovf_to_hdf(self, hdf_name, ovf_files = [], delete_ovfs=False):
+        """Load the data from multiple .ovf files into a chunked .hdf5 file.
+        This method is useful when the size of the simulation data is too large fit into RAM"""
+        
         # calculate the size and shape of the data we are dealing with
         meta, header = self.read_ovf(ovf_files[0], target='meta')
         header_encoded = [n.encode("ascii","ignore") for n in header]
@@ -175,6 +158,7 @@ class analyser():
             print("creating dataset")
             print("shape ", dset.shape)
             print("chunks ", dset.chunks)
+            
             # prepare an array of all the data in one time chunk
             for c in tqdm(range(int(sp.ceil(chunk_number)))):
                 temp_arr = sp.zeros((data_shape[0],data_shape[1],data_shape[2],data_shape[3],chunk_shape[-1]))
@@ -195,7 +179,12 @@ class analyser():
                 # open hdf5 file, write the time chunk to disk, close hdf5 file
                 with hd.File(hdf_name,'r+',libver="latest") as f:
                     f['mag'][:,:,:,:,chunk_time_length*c:chunk_time_length*(c+1)] = temp_arr
-
+            
+                # optionally delete the ovf files as they are written to hdf5
+                if delete_ovfs == True:
+                    for n in range(chunk_time_length):
+                        os.remove(ovf_files[chunk_time_length*c + n])
+            
         # Append to the hdf5 file additional meta data
         with hd.File(hdf_name,'a',libver='latest') as f:
             f.create_dataset('time', data = sp.array(time))
@@ -217,16 +206,16 @@ class analyser():
 
 
     def fft_dask(self, src_fname, src_dset, dst_fname, dst_dset, axis, background_subtraction = True, window = False):
-        '''
-        # import dask.array as da
-        # from dask.diagnostics import ProgressBar
-        # perform a FFT along a given access using DASK module
-        # which provide lazy evaluation for out of core work
-        # useful for large data sets that exceed RAM capacity
-        '''
+        """Perform an out of core FFT along a given axes using the DASK module.
+        Requires the data to be in a .hdf5 file.
+        Allows FFT to be performed on large datasets that do not fit into memory.
+        Takes the source .hdf5 file name and dataset as well as th destination file name and dataset as inputs.
+        """
+        
         if (src_fname == dst_fname):
             print('must write to new .hdf5 file')
             return 1
+        
         
         # open the hdf5 files        
         with hd.File(src_fname, 'r', libver='latest') as s:
@@ -236,6 +225,10 @@ class analyser():
                 dshape = s[src_dset].shape; cshape = s[src_dset].chunks
                 d.create_dataset(dst_dset, dshape, chunks=cshape, dtype=complex)
 
+        # CAN WE CLOSE THE FILES HERE AND REOPEN THEM LATER?
+        
+        with hd.File(src_fname,'r',libver='latest') as s:
+        
             # make a dask array from the dset
             data = da.from_array(s[src_dset], s[src_dset].chunks)
             
@@ -266,14 +259,20 @@ class analyser():
                 
             # fft and write to destination dataset on disk
             fft_data = da.fft.fft(data, axis=axis)
+            fft_data.dtype = 'complex64'
+            
             with ProgressBar():
-                fft_data.to_hdf5(dst_fname,dst_dset)#, chunks=cshape, dtype=complex, compression='lzf')
+                fft_data.to_hdf5(dst_fname,dst_dset, libver='latest')#, chunks=cshape, dtype=complex, compression='lzf')
         return 0
 
     # perform FFT along given axis, done out of core
     # multiple chunks that span the axis are read into RAM
     # data is processed and then written to disk iteratively
     def fft_no_dask(self, fname, srcdset, destdset, axis):
+        """Perform an FFT on a .hdf5 dataset along a given axis.
+        This takes an .hdf5 input file and dataset, loads the data into memory,
+        performs and FFT and creates a new dataset in the .hdf5 file in which to save the result"""
+        
         # open the hdf5 file
         with hd.File(fname, 'a', libver='latest') as f:
 
@@ -328,9 +327,6 @@ class analyser():
             os.remove('temp1.hdf5')
             os.remove('temp2.hdf5')
 
-        # it is possible that this is the wrong approach as Dask Array might have
-        # better handling of out of core processes. I can see the name temp.hdf5
-        # might clash between simulations if they intrude on one anothers filespace
         return 0
     
     def calc_dispersion_npy(self, src, dst, axis=1):
