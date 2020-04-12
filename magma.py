@@ -430,6 +430,7 @@ if __name__ == '__main__':
                         help='axis to apply fft along')
 
     args = parser.parse_args()
+    print(args.function)
 
     # create an analyser object
     a = analyser()
