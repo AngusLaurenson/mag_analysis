@@ -23,6 +23,7 @@ from tqdm import tqdm
 
 # find files and more
 import os
+from glob import glob
 
 # plotting
 import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ import colorcet
 
 # for command line arguments
 import argparse
+
 
 """Analyser object is used to analyse the contents of a folder. The intended use case is to analyse time series vector fields from .ovf file format, within a jupyter notebook's python environment.
 
