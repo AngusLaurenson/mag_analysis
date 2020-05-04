@@ -1,26 +1,57 @@
-# mag_analysis
-This project is to build a custom module for analysing time series data for magnetisation dynamics. The aim is to read in raw magnetisation data and calculate properties of interest such as dispersion of spin waves, profile of modes, magnetisation texture, permeability etc.
+DESCRIPTION:
 
-<<<<<<< HEAD
-#### Issues
+This Python module provides functions for handling micromagnetic simulation data 
+that is too large to fit into main memory. It is built around dask.array for
+parallel processing of data and hdf5 for storing data in chunked files for better
+random read and write performance than contiguous data files on disk.
 
-The read_ovf() function takes a long time to read data from the ovf files when 
-compared to the I/O for the hdf5 files. While it could be that the single hdf5 
-file is better than 1,000s of ovf files anyway. Not sure what is going on here 
-maybe the sequential reading of ovfs is super inefficient and a single hdf5 
-can be read from disk more cleverly using the hardware? I really don't know 
-but it seems weird. We find that initiating hdf5 files with the flag 
-libver='latest' yields a 4 fold write rate increase. However it is still way 
-too slow ~5MB/s instead of ~100MB/s (a typical value for HDDs). Another way to 
-increase the speed is to increase the cache size of h5py in order to more 
-efficiently write and read data.
+AUTHOR(S):
 
-#### Wishlist
+* Angus Laurenson, PhD student 2015-2019
+* asl203@exeter.ac.uk # depreciation warning: no longer a student at Exeter
+* 06angus06@gmail.com # personal email address if you get really stuck
 
-* add plotting of phase amplitude maps
-* switch h5py to h5py_cache in order to increase cache to fit a whole chunk
-=======
-#### Wishlist
+USAGE:
 
-* permeability calculations
->>>>>>> master
+Below is a typical example of using magma
+```
+import magma
+import h5py
+from glob import glob
+import dask.array as da
+
+# use glob to get a list of ovf files
+ovfs = glob('path/to/*.ovf')
+
+# filter the ovf files to get ones you want
+ovfs = [x for x in ovfs if x.startswith('m')]
+
+# read ovf files into a .hdf5 files, removing .ovf files as we go
+magma.ovf_to_hdf('data.hdf5',ovfs, delete_ovfs=True)
+
+# Perform fft along the time dimension
+magma.fft_dask('data.hdf5','mag','xf_data.hdf5','xf_data',-1)
+
+# To read from .hdf5 file
+with h5py.File('data.hdf5','r') as f:
+    arr = da.from_array(f['mag'])
+    
+    # dask.array objects are lazy, so the statement is not evaluated immediately
+    # you can select a subset of data or setup an agregation
+    
+    # subsampling, load to main memory
+    m_lowres = arr[::10,::10,::10].load()
+    
+    # get sum over time of the data
+    m_sum_time = arr.sum(axis=-1)
+    
+    # You can write dask.arrays to disk like
+    with hd.File(hdf_name,'r+',libver="latest") as f:
+        f[dataset_name]= m_lowres
+   
+    # Applying numpy function directly converts the lazy dask array 
+    # into an eager numpy array in memory
+    arr = np.array(arr).compute()
+    
+    
+```

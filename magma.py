@@ -129,7 +129,7 @@ class analyser():
         sp.save(dst,data)
         return 0
 
-    def ovf_to_hdf(self, hdf_name, ovf_files = [], delete_ovfs=False, overwrite=False, metadata=True):
+    def ovf_to_hdf(self, hdf_name, ovf_files = [], delete_ovfs=False, overwrite=False):
         """Load the data from multiple .ovf files into a chunked .hdf5 file.
         This method is useful when the size of the simulation data is too large fit into RAM"""
 
@@ -137,22 +137,6 @@ class analyser():
         if (os.path.isfile(hdf_name)) & (overwrite==False):
             print('file already exists. Set kwarg "overwrite=True" to overwrite existing file. Aborting...')
             return 0
-
-        # grab log file and duration if possible, add to hdf5 metadata
-        if metadata == True:
-            dir = os.path.dirname(ovf_files[0])
-            try:
-                with open(dir+'/log.txt') as f:
-                    log = f.read()
-            except:
-                print('no log file found')
-
-            try:
-                with open(dir+'/duration') as f:
-                    duration = f.read()
-                    duration += ' # nanoseconds'
-            except:
-                print('no duration file found')
 
 
         # calculate the size and shape of the data we are dealing with
@@ -212,13 +196,6 @@ class analyser():
         with hd.File(hdf_name,'a',libver='latest') as f:
             f.create_dataset('time', data = sp.array(time))
             f.create_dataset('header', (len(header_encoded),1),'S30', header_encoded)
-
-            if log:
-                f.create_dataset('log', log)
-
-            if duration:
-                f.create_dataset('duration', duration)
-
             try:
                 f.create_dataset('meta', meta.data)
             except:
